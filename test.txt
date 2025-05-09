@@ -1,4 +1,11 @@
-addn-hosts=/etc/dnsmasq.blocklist
+sudo apt install python3 python3-venv python3-pip
 
-# Forward all other DNS queries to Google
-server=8.8.8.8
+
+cd /path/to/dns-sinkhole
+python3 -m venv venv
+
+
+source venv/bin/activate
+
+pip install flask requests
+
