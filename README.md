@@ -53,8 +53,8 @@ dns-sinkhole/
 
 ```bash
 # Clone repo
-git clone https://github.com/yourusername/dns-sinkhole.git
-cd dns-sinkhole
+git clone https://github.com/sujallamichhane18/dns-sink-hole.git
+cd dns-sink-hole
 
 # Install dependencies
 pip install flask requests
