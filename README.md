@@ -116,17 +116,9 @@ Use `crontab -e` to automate updates:
 
 ---
 
-## 📈 Screenshots
 
-*Add screenshots of your dashboard interface here.*
 
----
 
-## 📃 License
-
-MIT License — feel free to use, modify, and enhance this project!
-
----
 
 ## 👨‍💻 Author
 
