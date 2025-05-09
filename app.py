@@ -8,7 +8,7 @@ import dns.query
 import dns.resolver
 
 DB_FILE = 'sinkhole.db'
-BLACKLIST_FILE = 'blacklist.json'
+BLACKLIST_FILE = 'blocklist.json'
 UPSTREAM_DNS = '8.8.8.8'
 
 # ------------------ DB Setup ------------------ #
