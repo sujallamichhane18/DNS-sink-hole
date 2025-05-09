@@ -1,0 +1,4 @@
+addn-hosts=/etc/dnsmasq.blocklist
+
+# Forward all other DNS queries to Google
+server=8.8.8.8
