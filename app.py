@@ -1,82 +1,74 @@
-from flask import Flask, render_template, request, jsonify
-import os, json, datetime, sqlite3, requests, subprocess
+import socketserver
+import json
+import os
+import datetime
+import sqlite3
+import dns.message
+import dns.query
+import dns.resolver
 
-app = Flask(__name__)
 DB_FILE = 'sinkhole.db'
 BLACKLIST_FILE = 'blacklist.json'
-BLOCKLIST_HOSTS = '/etc/dnsmasq.d/blocklist.hosts'
+UPSTREAM_DNS = '8.8.8.8'
 
+# ------------------ DB Setup ------------------ #
 def init_db():
-    with sqlite3.connect(DB_FILE) as conn:
-        conn.execute('''CREATE TABLE IF NOT EXISTS dns_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            domain TEXT,
-            timestamp TEXT,
-            client_ip TEXT,
-            action TEXT
-        )''')
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS dns_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        domain TEXT,
+        timestamp TEXT,
+        client_ip TEXT,
+        action TEXT
+    )''')
+    conn.commit()
+    conn.close()
 
+# ------------------ Blacklist ------------------ #
 def load_blacklist():
-    if not os.path.exists(BLACKLIST_FILE): return []
-    with open(BLACKLIST_FILE, 'r') as f: return json.load(f)
+    if not os.path.exists(BLACKLIST_FILE):
+        return []
+    with open(BLACKLIST_FILE, 'r') as f:
+        return json.load(f)
 
-def save_blacklist(blacklist):
-    with open(BLACKLIST_FILE, 'w') as f:
-        json.dump(blacklist, f, indent=2)
-    update_dnsmasq_blocklist(blacklist)
+blacklist = set(load_blacklist())
+init_db()
 
-def update_dnsmasq_blocklist(blacklist):
-    with open(BLOCKLIST_HOSTS, 'w') as f:
-        for domain in blacklist:
-            f.write(f"address=/{domain}/127.0.0.1\n")
-    subprocess.run(["sudo", "systemctl", "restart", "dnsmasq"])
+# ------------------ DNS Handler ------------------ #
+class DNSHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        data, socket = self.request
+        query = dns.message.from_wire(data)
+        domain = str(query.question[0].name).rstrip('.')
+        client_ip = self.client_address[0]
 
-def fetch_blacklist_from_abusech():
-    url = "https://urlhaus.abuse.ch/downloads/text/"
-    domains = set()
-    try:
-        response = requests.get(url, timeout=10)
-        for line in response.text.splitlines():
-            if not line.startswith('#') and line.strip():
-                parts = line.strip().split('/')
-                if len(parts) > 2:
-                    domains.add(parts[2])
-    except Exception as e:
-        print("Error fetching from Abuse.ch:", e)
-    return list(domains)
+        if domain in blacklist:
+            response = dns.message.make_response(query)
+            response.set_rcode(3)  # NXDOMAIN
+            action = 'BLOCKED'
+        else:
+            try:
+                response = dns.query.udp(query, UPSTREAM_DNS, timeout=2)
+                action = 'FORWARDED'
+            except Exception:
+                response = dns.message.make_response(query)
+                response.set_rcode(2)  # SERVFAIL
+                action = 'ERROR'
 
-@app.route('/')
-def index():
-    with sqlite3.connect(DB_FILE) as conn:
-        logs = conn.execute("SELECT domain, timestamp, client_ip, action FROM dns_logs ORDER BY timestamp DESC LIMIT 100").fetchall()
-    return render_template('index.html', logs=logs, blacklist=load_blacklist())
+        log_query(domain, client_ip, action)
+        socket.sendto(response.to_wire(), self.client_address)
 
-@app.route('/api/add_domain', methods=['POST'])
-def add_domain():
-    domain = request.form['domain'].strip().lower()
-    blacklist = load_blacklist()
-    if domain not in blacklist:
-        blacklist.append(domain)
-        save_blacklist(blacklist)
-    return jsonify(success=True)
+def log_query(domain, client_ip, action):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("INSERT INTO dns_logs (domain, timestamp, client_ip, action) VALUES (?, ?, ?, ?)",
+              (domain, datetime.datetime.now().isoformat(), client_ip, action))
+    conn.commit()
+    conn.close()
 
-@app.route('/api/remove_domain', methods=['POST'])
-def remove_domain():
-    domain = request.form['domain'].strip().lower()
-    blacklist = load_blacklist()
-    if domain in blacklist:
-        blacklist.remove(domain)
-        save_blacklist(blacklist)
-    return jsonify(success=True)
-
-@app.route('/api/update_blacklist', methods=['POST'])
-def update_blacklist():
-    fetched = fetch_blacklist_from_abusech()
-    current = set(load_blacklist())
-    updated = list(current.union(set(fetched)))
-    save_blacklist(updated)
-    return jsonify(success=True, added=len(updated) - len(current))
-
+# ------------------ Server Start ------------------ #
 if __name__ == '__main__':
-    init_db()
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    print("[*] DNS Sinkhole running on port 53 (UDP)...")
+    with socketserver.UDPServer(('', 53), DNSHandler) as server:
+        server.serve_forever()
