@@ -1,19 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DNS Sinkhole Dashboard</title>
-    <!-- Link to the CSS file in static/css folder -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <h1>DNS Sinkhole Dashboard</h1>
-
     <h2>Logs</h2>
     <ul>
         {% for log in logs %}
-            <li>{{ log[1] }} - {{ log[2] }} - {{ log[3] }} - {{ log[4] }}</li>
+            <li>{{ log[1] }} | {{ log[2] }} | {{ log[3] }} | {{ log[0] }}</li>
         {% endfor %}
     </ul>
 
@@ -24,22 +20,18 @@
         {% endfor %}
     </ul>
 
-    <h3>Add a Domain to Block</h3>
     <form action="/api/add_domain" method="post">
-        <input type="text" name="domain" placeholder="Enter domain to block" required>
-        <button type="submit">Add Domain</button>
+        <input type="text" name="domain" placeholder="Add domain">
+        <button>Add</button>
     </form>
 
-    <h3>Remove a Domain from Blocklist</h3>
     <form action="/api/remove_domain" method="post">
-        <input type="text" name="domain" placeholder="Enter domain to unblock" required>
-        <button type="submit">Remove Domain</button>
+        <input type="text" name="domain" placeholder="Remove domain">
+        <button>Remove</button>
     </form>
 
-    <h3>Update Blacklist from External Source</h3>
     <form action="/api/update_blacklist" method="post">
-        <button type="submit">Update Blacklist</button>
+        <button>Fetch Latest Blacklist</button>
     </form>
-
 </body>
 </html>
